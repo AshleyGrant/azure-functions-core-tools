@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using Newtonsoft.Json;
 
-namespace Azure.Functions.Cli.Actions.DeployActions.Platforms.Models
+namespace Azure.Functions.Cli.Kubernetes.Models
 {
 
     public class Env

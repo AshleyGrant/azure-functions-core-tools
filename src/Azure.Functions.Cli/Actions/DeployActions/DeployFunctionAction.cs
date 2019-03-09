@@ -22,50 +22,54 @@ namespace Azure.Functions.Cli.Actions.LocalActions
         public string Registry { get; set; }
         public string Name { get; set; } = string.Empty;
         public string Platform { get; set; } = string.Empty;
-        public int MinInstances { get; set; } = 1;
-        public int MaxInstances { get; set; } = 1000;
         public string FolderName { get; set; } = string.Empty;
-        public string ConfigPath { get; set; } = string.Empty;
+        public string ImageName { get; set; } = string.Empty;
+        public string SerializingFormat { get; set; } = string.Empty;
+        public bool IsDryRun { get; set; }
 
-        public List<string> Platforms { get; set; } = new List<string>() { "kubernetes", "knative" };
-        private readonly ITemplatesManager _templatesManager;
+        private readonly IEnumerable<string> _platforms = new[] { "kubernetes", "knative" };
+        private readonly ISecretsManager _secretsManager;
+        private IEnumerable<string> _serializingOptions = new[] { "json", "yaml" };
 
-        public DeployAction(ITemplatesManager templatesManager)
+        public DeployAction(ISecretsManager secretsManager)
         {
-            _templatesManager = templatesManager;
+            _secretsManager = secretsManager;
         }
 
         public override ICommandLineParserResult ParseArgs(string[] args)
         {
             Parser
-                .Setup<string>("registry")
-                .WithDescription("A Docker Registry name that you are logged into")
-                .Callback(t => Registry = t).Required();
-
-            Parser
                 .Setup<string>("platform")
-                .WithDescription("Hosting platform for the function app. Valid options: " + String.Join(",", Platforms))
-                .Callback(t => Platform = t).Required();
+                .WithDescription($"Hosting platform for the function app. Valid options: {string.Join(",", _platforms)}")
+                .Callback(t => Platform = t)
+                .Required();
 
             Parser
-                .Setup<string>("name")
-                .WithDescription("Function name")
-                .Callback(t => Name = t).Required();
+                .Setup<string>('n', "name")
+                .WithDescription("Name for the image and deployment to build")
+                .Callback(t => Name = t)
+                .Required();
 
             Parser
-                .Setup<int>("min")
-                .WithDescription("[Optional] Minimum number of function instances")
-                .Callback(t => MinInstances = t);
+                .Setup<string>("registry")
+                .WithDescription("A Docker Registry name that you are logged into. Only needed if no image-name is provided.")
+                .Callback(t => Registry = t);
 
             Parser
-                .Setup<int>("max")
-                .WithDescription("[Optional] Maximum number of function instances")
-                .Callback(t => MaxInstances = t);
+                .Setup<string>("image-name")
+                .WithDescription("Fully qualified image name to use for deployment.")
+                .Callback(n => ImageName = n);
 
             Parser
-                .Setup<string>("config")
-                .WithDescription("[Optional] Config file")
-                .Callback(t => ConfigPath = t);
+                .Setup<string>('o', "output")
+                .WithDescription($"Serialize deployment specifications to stdout. Only used with --dry-run. Options: {string.Join(",", _serializingOptions)}")
+                .SetDefault(_serializingOptions.First())
+                .Callback(o => SerializingFormat = o);
+
+            Parser
+                .Setup<bool>("dry-run")
+                .WithDescription("Only print the deployment specification. Don't run the actual deployment")
+                .Callback(f => IsDryRun = f);
 
             if (args.Any() && !args.First().StartsWith("-"))
             {
@@ -84,43 +88,61 @@ namespace Azure.Functions.Cli.Actions.LocalActions
                 Environment.CurrentDirectory = folderPath;
             }
 
-            if (!Platforms.Contains(Platform))
+            if (!_platforms.Contains(Platform))
             {
-                ColoredConsole.Error.WriteLine(ErrorColor($"platform {Platform} is not supported. Valid options are: {String.Join(",", Platforms)}"));
-                return;
+                throw new CliException($"platform {Platform} is not supported. Valid options are: {string.Join(",", _platforms)}");
             }
 
             if (!CommandChecker.CommandExists("kubectl"))
             {
-                ColoredConsole.Error.WriteLine(ErrorColor($"kubectl is required for deploying to kubernetes and knative. Please make sure to install kubectl and try again."));
-                return;
+                throw new CliException($"kubectl is required for deploying to kubernetes and knative. Please make sure to install kubectl and try again.");
             }
 
+            var imageName = ImageName;
+
+            if (string.IsNullOrEmpty(imageName))
+            {
+                if (string.IsNullOrEmpty(Registry))
+                {
+                    throw new CliException("a --registry is required if no --image-name is specified. Please either specify an image-name or a registry.");
+                }
+
+                imageName = $"{Registry}/{Name.SanitizeImageName()}";
+                await BuildDockerImage(imageName);
+            }
+
+            var platform = PlatformFactory.CreatePlatform(Platform, _secretsManager);
+
+            if (platform == null)
+            {
+                throw new CliException($"Platform {Platform} is not supported");
+            }
+
+            if (IsDryRun)
+            {
+                platform.SerializeDeployment(Name, imageName, SerializingFormat);
+            }
+            else
+            {
+                await platform.Deploy(Name, imageName);
+            }
+        }
+
+        public static async Task BuildDockerImage(string imageName)
+        {
             var dockerFilePath = Path.Combine(Environment.CurrentDirectory, "Dockerfile");
 
             if (!FileSystemHelpers.FileExists(dockerFilePath))
             {
-                ColoredConsole.Error.WriteLine(ErrorColor($"Dockerfile not found in directory {Environment.CurrentDirectory}"));
-                return;
+                throw new CliException($"Dockerfile not found in directory {Environment.CurrentDirectory}." + Environment.NewLine +
+                                        "Try running \"func init . --docker-only\", add a Dockerfile, or provide --image-name.");
             }
-
-            var image = $"{Registry}/{Name.SanitizeImageName()}";
 
             ColoredConsole.WriteLine("Building Docker image...");
-            await DockerHelpers.DockerBuild(image, Environment.CurrentDirectory);
+            await DockerHelpers.DockerBuild(imageName, Environment.CurrentDirectory);
 
             ColoredConsole.WriteLine("Pushing function image to registry...");
-            await DockerHelpers.DockerPush(image);
-
-            var platform = PlatformFactory.CreatePlatform(Platform, ConfigPath);
-
-            if (platform == null)
-            {
-                ColoredConsole.Error.WriteLine(ErrorColor($"Platform {Platform} is not supported"));
-                return;
-            }
-
-            await platform.DeployContainerizedFunction(Name, image, MinInstances, MaxInstances);
+            await DockerHelpers.DockerPush(imageName);
         }
     }
 }

@@ -9,9 +9,10 @@ using Azure.Functions.Cli.Interfaces;
 using Colors.Net;
 using KubeClient;
 using KubeClient.Models;
-using Azure.Functions.Cli.Actions.DeployActions.Platforms.Models;
 using Newtonsoft.Json.Linq;
 using Newtonsoft.Json;
+using Azure.Functions.Cli.Kubernetes;
+using Azure.Functions.Cli.Kubernetes.Models;
 
 namespace Azure.Functions.Cli.Actions.DeployActions.Platforms
 {
@@ -21,9 +22,9 @@ namespace Azure.Functions.Cli.Actions.DeployActions.Platforms
         private const string FUNCTIONS_NAMESPACE = "azure-functions";
         private static KubeApiClient client;
 
-        public async Task DeployContainerizedFunction(string functionName, string image, int min, int max)
+        public async Task Deploy(string functionName, string image)
         {
-            await Deploy(functionName, image, FUNCTIONS_NAMESPACE, min, max);
+            await Deploy(functionName, image, FUNCTIONS_NAMESPACE);
         }
 
         public KnativePlatform(string configFile)
@@ -43,7 +44,7 @@ namespace Azure.Functions.Cli.Actions.DeployActions.Platforms
             client = KubeApiClient.Create(options);
         }
 
-        private async Task Deploy(string name, string image, string nameSpace, int min, int max)
+        private async Task Deploy(string name, string image, string nameSpace)
         {
             var isHTTP = IsHTTPTrigger(name);
 
@@ -53,7 +54,7 @@ namespace Azure.Functions.Cli.Actions.DeployActions.Platforms
             ColoredConsole.WriteLine();
             ColoredConsole.WriteLine("Deploying function to Knative...");
 
-            var knativeService = GetKnativeService(name, image, nameSpace, min, max, isHTTP);
+            var knativeService = GetKnativeService(name, image, nameSpace, isHTTP);
             var json = Newtonsoft.Json.JsonConvert.SerializeObject(knativeService,
                             Newtonsoft.Json.Formatting.None,
                             new Newtonsoft.Json.JsonSerializerSettings
@@ -62,7 +63,7 @@ namespace Azure.Functions.Cli.Actions.DeployActions.Platforms
                             });
 
             File.WriteAllText("deployment.json", json);
-            await KubernetesHelper.RunKubectl($"apply -f deployment.json");
+            await KubectlHelper.RunKubectl($"apply -f deployment.json");
             File.Delete("deployment.json");
 
             var externalIP = await GetIstioClusterIngressIP();
@@ -83,7 +84,7 @@ namespace Azure.Functions.Cli.Actions.DeployActions.Platforms
             ColoredConsole.WriteLine("Plese note: it may take a few minutes for the knative service to be reachable");
         }
 
-        private string GetFunctionHost(string functionName, string nameSpace) 
+        private string GetFunctionHost(string functionName, string nameSpace)
         {
             return string.Format("{0}.{1}.example.com", functionName, nameSpace);
         }
@@ -92,10 +93,10 @@ namespace Azure.Functions.Cli.Actions.DeployActions.Platforms
         {
             var str = File.ReadAllText(string.Format("{0}/function.json", functionName));
             var jObj = JsonConvert.DeserializeObject<FunctionJson>(str);
-            return jObj.bindings.Any(d=> d.type == "httpTrigger");
+            return jObj.bindings.Any(d => d.type == "httpTrigger");
         }
 
-        private KnativeService GetKnativeService(string name, string image, string nameSpace, int min, int max, bool isHTTP)
+        private KnativeService GetKnativeService(string name, string image, string nameSpace, bool isHTTP)
         {
             var knativeService = new KnativeService();
             knativeService.kind = "Service";
@@ -116,15 +117,15 @@ namespace Azure.Functions.Cli.Actions.DeployActions.Platforms
             knativeService.spec.runLatest.configuration.revisionTemplate.metadata.annotations = new Dictionary<string, string>();
 
             // opt out of knative scale-to-zero for non-http triggers
-            if (!isHTTP) 
+            if (!isHTTP)
             {
-                knativeService.spec.runLatest.configuration.revisionTemplate.metadata.annotations.Add("autoscaling.knative.dev/minScale", min.ToString());
+                knativeService.spec.runLatest.configuration.revisionTemplate.metadata.annotations.Add("autoscaling.knative.dev/minScale", 1.ToString());
             }
 
-            if (max > 0) 
-            {
-                knativeService.spec.runLatest.configuration.revisionTemplate.metadata.annotations.Add("autoscaling.knative.dev/maxScale", max.ToString());
-            }
+            // if (max > 0)
+            // {
+            //     knativeService.spec.runLatest.configuration.revisionTemplate.metadata.annotations.Add("autoscaling.knative.dev/maxScale", max.ToString());
+            // }
 
             return knativeService;
         }
@@ -142,8 +143,29 @@ namespace Azure.Functions.Cli.Actions.DeployActions.Platforms
 
         private async Task CreateNamespace(string name)
         {
-            await KubernetesHelper.RunKubectl($"create ns {name}");
+            await KubectlHelper.RunKubectl($"create ns {name}");
         }
+
+        public void SerializeDeployment(string deploymentName, string image, string serializationFormat)
+        {
+            throw new NotImplementedException();
+        }
+    }
+
+    public class Binding
+    {
+        public string authLevel { get; set; }
+        public string type { get; set; }
+        public string direction { get; set; }
+        public string name { get; set; }
+        public List<string> methods { get; set; }
+    }
+
+    public class FunctionJson
+    {
+        public bool disabled { get; set; }
+        public List<Binding> bindings { get; set; }
+        public string scriptFile { get; set; }
     }
 }
 

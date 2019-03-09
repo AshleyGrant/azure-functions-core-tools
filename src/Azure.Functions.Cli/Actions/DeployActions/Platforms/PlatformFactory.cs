@@ -6,14 +6,14 @@ namespace Azure.Functions.Cli.Actions.DeployActions.Platforms
 {
     public static class PlatformFactory
     {
-        public static IHostingPlatform CreatePlatform(string name, string configFile = "")
+        public static IHostingPlatform CreatePlatform(string name, ISecretsManager secretsManager)
         {
             switch (name)
             {
                 case "kubernetes":
-                    return new KubernetesPlatform(configFile);
+                    return new KubernetesPlatform(secretsManager);
                 case "knative":
-                    return new KnativePlatform(configFile);
+                    return new KnativePlatform(null);
                 default:
                     return null;
             }

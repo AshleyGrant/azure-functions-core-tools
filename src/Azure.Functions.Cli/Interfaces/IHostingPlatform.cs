@@ -4,6 +4,7 @@ namespace Azure.Functions.Cli.Interfaces
 {
     public interface IHostingPlatform
     {
-        Task DeployContainerizedFunction(string functionName, string image, int min, int max);
+        Task Deploy(string deploymentName, string image);
+        void SerializeDeployment(string deploymentName, string image, string serializationFormat);
     }
 }
