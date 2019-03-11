@@ -17,59 +17,71 @@ namespace Azure.Functions.Cli.Kubernetes
 {
     public static class KubernetesHelper
     {
-        public static Deployment GenerateDeployment(string name, string @namespace, Secrets secrets, string image, int replicaCount)
+        public static DeploymentV1Beta1 GenerateDeployment(string name, string @namespace, Secrets secrets, string image, int replicaCount)
         {
-            var env = secrets.data
-                .Select(s => new ContainerEnvironment
+            return new DeploymentV1Beta1
+            {
+                ApiVersion = "apps/v1beta1",
+                Kind = "Deployment",
+                Metadata = new ObjectMetaV1
                 {
-                    name = s.Key,
-                    valueFrom = new EnvironmentValueFrom
+                    Namespace = @namespace,
+                    Name = name,
+                    Labels = new Dictionary<string, string>
                     {
-                        secretKeyRef = new ValueFromSecretKeyRef
+                        { "app", name }
+                    },
+                },
+                Spec = new DeploymentSpecV1Beta1
+                {
+                    Replicas = replicaCount,
+                    Selector = new LabelSelectorV1
+                    {
+                        MatchLabels = new Dictionary<string, string>
                         {
-                            name = secrets.metadata.name,
-                            key = s.Key
+                            { "app",  name }
+                        }
+                    },
+                    Template = new PodTemplateSpecV1
+                    {
+                        Metadata = new ObjectMetaV1
+                        {
+                            Labels = new Dictionary<string, string>
+                            {
+                                { "app", name }
+                            }
+                        },
+                        Spec = new PodSpecV1
+                        {
+                            Containers = new List<ContainerV1>
+                            {
+                                new ContainerV1
+                                {
+                                    Name = name,
+                                    Image = image,
+                                    ImagePullPolicy = "Always",
+                                    Env = secrets.data
+                                        .Select(s => new EnvVarV1
+                                        {
+                                            Name = s.Key,
+                                            ValueFrom = new EnvVarSourceV1
+                                            {
+                                                SecretKeyRef = new SecretKeySelectorV1
+                                                {
+                                                    Name = secrets.metadata.name,
+                                                    Key = s.Key
+                                                }
+                                            }
+                                        }).ToList()
+                                }
+                            }
                         }
                     }
-                });
-
-            var deployment = new Deployment();
-            deployment.apiVersion = "apps/v1beta1";
-            deployment.kind = "Deployment";
-
-            var metadata = new Metadata();
-            metadata.@namespace = @namespace;
-            metadata.name = name;
-            metadata.labels = new Labels();
-            metadata.labels.app = name;
-
-            deployment.metadata = metadata;
-            deployment.spec = new DeploymentSpec();
-            deployment.spec.replicas = replicaCount;
-            deployment.spec.selector = new Selector();
-
-            deployment.spec.selector.matchLabels = new MatchLabels();
-            deployment.spec.selector.matchLabels.app = name;
-
-            deployment.spec.template = new Models.Template();
-            deployment.spec.template.metadata = new Metadata();
-            deployment.spec.template.metadata.labels = new Labels();
-            deployment.spec.template.metadata.labels.app = name;
-
-            deployment.spec.template.spec = new TemplateSpec();
-            deployment.spec.template.spec.containers = new List<Container>();
-            deployment.spec.template.spec.containers.Add(new Container()
-            {
-                name = name,
-                image = image,
-                env = env
-            });
-
-            return deployment;
+                }
+            };
         }
 
-
-        public static ScaledObject GenerateScaledObject(string name, string @namespace, Deployment deployment)
+        public static ScaledObject GenerateScaledObject(string name, string @namespace, DeploymentV1Beta1 deployment)
         {
             var functionJsonFiles = FileSystemHelpers
                     .GetDirectories(Environment.CurrentDirectory)
@@ -105,7 +117,7 @@ namespace Azure.Functions.Cli.Kubernetes
                 {
                     scaleTargetRef = new ScaledObjectScaleTargetRef
                     {
-                        deploymentName = deployment.metadata.name
+                        deploymentName = deployment.Metadata.Name
                     },
                     triggers = triggers
                 }
@@ -114,7 +126,7 @@ namespace Azure.Functions.Cli.Kubernetes
 
         internal static async Task<bool> HasKore()
         {
-            var koreResult = await KubectlHelper.KubectlGet<KubernetesSearchResult<Deployment>>("deployments --selector=app=kore-edgess --all-namespaces");
+            var koreResult = await KubectlHelper.KubectlGet<KubernetesSearchResult<DeploymentV1Beta1>>("deployments --selector=app=kore-edgess --all-namespaces");
             return koreResult.items.Any();
         }
 
@@ -122,6 +134,11 @@ namespace Azure.Functions.Cli.Kubernetes
         {
             var crdResult = await KubectlHelper.KubectlGet<KubernetesSearchResult<CustomResourceDefinitionV1Beta1>>("crd");
             return crdResult.items.Any(i => i.Metadata.Name == "scaledobjects.kore.k8s.io");
+        }
+
+        public static async Task CreateKore()
+        {
+
         }
 
         public static Secrets GenerateSecrets(string name, string @namespace, ISecretsManager secretsManager)

@@ -77,7 +77,7 @@ namespace Azure.Functions.Cli.Actions.DeployActions.Platforms
             }
         }
 
-        private (Secrets, Deployment, ScaledObject) Build(string name, string imageName)
+        private (SecretV1, DeploymentV1Beta1, ScaledObject) Build(string name, string imageName)
         {
             var secrets = KubernetesHelper.GenerateSecrets($"{name}-secrets", FUNCTIONS_NAMESPACE, _secretsManager);
             var deployment = KubernetesHelper.GenerateDeployment($"{name}-deployment", FUNCTIONS_NAMESPACE, secrets, imageName, 1);
