@@ -262,6 +262,7 @@ namespace Azure.Functions.Cli.Actions.LocalActions
             {
                 throw new CliException("Can't find WorkerRuntime None");
             }
+            await WriteFiles(".dockerignore", await StaticResources.DockerIgnoreFile);
         }
 
         private static async Task WriteExtensionsJson()

@@ -146,7 +146,7 @@ namespace Azure.Functions.Cli.Actions.DeployActions.Platforms
             await KubectlHelper.RunKubectl($"create ns {name}");
         }
 
-        public void SerializeDeployment(string deploymentName, string image, string serializationFormat)
+        public Task SerializeDeployment(string deploymentName, string image, string serializationFormat)
         {
             throw new NotImplementedException();
         }

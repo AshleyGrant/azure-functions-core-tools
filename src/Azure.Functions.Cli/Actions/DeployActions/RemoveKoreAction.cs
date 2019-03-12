@@ -17,20 +17,12 @@ using static Colors.Net.StringStaticMethods;
 
 namespace Azure.Functions.Cli.Actions.LocalActions
 {
-    [Action(Name = "deploy-kore", HelpText = "")]
-    internal class DeployKoreAction : BaseAction
+    [Action(Name = "remove-kore", Context = Context.Kubernetes, HelpText = "")]
+    internal class RemoveKoreAction : BaseAction
     {
-        public bool Force { get; private set; }
-
-        public override ICommandLineParserResult ParseArgs(string[] args)
-        {
-            Parser
-                .Setup<bool>("force")
-                .Callback(f => Force = f);
-        }
         public async override Task RunAsync()
         {
-            await KubernetesHelper.CreateKore();
+            await KubernetesHelper.RemoveKore();
         }
     }
 }

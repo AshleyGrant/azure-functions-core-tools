@@ -35,6 +35,8 @@ namespace Azure.Functions.Cli
 
         public static Task<string> DockerfileNode => GetValue("Dockerfile.node");
 
+        public static Task<string> DockerIgnoreFile => GetValue("dockerignore");
+
         public static Task<string> VsCodeExtensionsJson => GetValue("vscode.extensions.json");
 
         public static Task<string> LocalSettingsJson => GetValue("local.settings.json");

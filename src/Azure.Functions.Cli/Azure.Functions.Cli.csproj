@@ -72,6 +72,9 @@
     <EmbeddedResource Include="StaticResources\funcignore">
       <LogicalName>$(AssemblyName).funcignore</LogicalName>
     </EmbeddedResource>
+    <EmbeddedResource Include="StaticResources\dockerignore">
+      <LogicalName>$(AssemblyName).dockerignore</LogicalName>
+    </EmbeddedResource>
   </ItemGroup>
   <ItemGroup>
     <Content Include="..\..\tools\python\packapp\__main__.py">

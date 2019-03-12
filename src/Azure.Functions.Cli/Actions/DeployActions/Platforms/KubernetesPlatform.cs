@@ -26,9 +26,9 @@ namespace Azure.Functions.Cli.Actions.DeployActions.Platforms
             _secretsManager = secretsManager;
         }
 
-        public void SerializeDeployment(string name, string imageName, string serializationFormat)
+        public async Task SerializeDeployment(string name, string imageName, string serializationFormat)
         {
-            (var secrets, var deployment, var scaledObject) = Build(name, imageName);
+            (var secrets, var deployment, var scaledObject) = await Build(name, imageName);
             var seperator = string.Equals(serializationFormat, "yaml", StringComparison.OrdinalIgnoreCase)
                 ? "---"
                 : string.Empty;
@@ -61,13 +61,13 @@ namespace Azure.Functions.Cli.Actions.DeployActions.Platforms
 
         public async Task Deploy(string name, string imageName)
         {
-            (var secrets, var deployment, var scaledObject) = Build(name, imageName);
+            (var secrets, var deployment, var scaledObject) = await Build(name, imageName);
             await CreateNamespace();
-            await KubectlHelper.KubectlCreate(secrets, showOutput: true);
-            await KubectlHelper.KubectlCreate(deployment, showOutput: true);
+            await KubectlHelper.KubectlApply(secrets, showOutput: true);
+            await KubectlHelper.KubectlApply(deployment, showOutput: true);
             if (await KubernetesHelper.HasScaledObjectCrd() && await KubernetesHelper.HasKore())
             {
-                await KubectlHelper.KubectlCreate(scaledObject, showOutput: true);
+                await KubectlHelper.KubectlApply(scaledObject, showOutput: true);
             }
             else
             {
@@ -77,10 +77,13 @@ namespace Azure.Functions.Cli.Actions.DeployActions.Platforms
             }
         }
 
-        private (SecretV1, DeploymentV1Beta1, ScaledObject) Build(string name, string imageName)
+        private async Task<(Secrets, Deployment, ScaledObject)> Build(string name, string imageName)
         {
             var secrets = KubernetesHelper.GenerateSecrets($"{name}-secrets", FUNCTIONS_NAMESPACE, _secretsManager);
-            var deployment = KubernetesHelper.GenerateDeployment($"{name}-deployment", FUNCTIONS_NAMESPACE, secrets, imageName, 1);
+            var replicaCount = await KubernetesHelper.HasKore() && await KubernetesHelper.HasScaledObjectCrd()
+                ? 0
+                : 1;
+            var deployment = KubernetesHelper.GenerateDeployment($"{name}-deployment", FUNCTIONS_NAMESPACE, secrets, imageName, replicaCount);
             var scaledObject = KubernetesHelper.GenerateScaledObject($"{name}-scaledobject", FUNCTIONS_NAMESPACE, deployment);
             return (secrets, deployment, scaledObject);
         }

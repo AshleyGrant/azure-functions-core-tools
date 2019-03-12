@@ -17,6 +17,7 @@ using static Colors.Net.StringStaticMethods;
 namespace Azure.Functions.Cli.Actions.LocalActions
 {
     [Action(Name = "deploy", HelpText = "Deploy a function app to custom hosting backends")]
+    [Action(Name = "deploy", Context = Context.Kubernetes, HelpText = "Deploy a function app to custom hosting backends")]
     internal class DeployAction : BaseAction
     {
         public string Registry { get; set; }
@@ -120,7 +121,7 @@ namespace Azure.Functions.Cli.Actions.LocalActions
 
             if (IsDryRun)
             {
-                platform.SerializeDeployment(Name, imageName, SerializingFormat);
+                await platform.SerializeDeployment(Name, imageName, SerializingFormat);
             }
             else
             {

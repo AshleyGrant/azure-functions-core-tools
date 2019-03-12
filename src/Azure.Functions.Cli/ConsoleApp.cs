@@ -293,6 +293,7 @@ namespace Azure.Functions.Cli
 
             // Check if there is a --prefix or --script-root and update CurrentDirectory
             UpdateCurrentDirectory(args);
+            args = CheckForKubernetes(args, context);
             try
             {
                 // Give the action a change to parse its args.
@@ -315,6 +316,15 @@ namespace Azure.Functions.Cli
                 ColoredConsole.Error.WriteLine(ex.Message);
                 return null;
             }
+        }
+
+        private string[] CheckForKubernetes(string[] args, Context context)
+        {
+            if (context == Context.Kubernetes)
+            {
+                args = args.Prepend("kubernetes").Prepend("--platform").ToArray();
+            }
+            return args;
         }
 
         /// <summary>

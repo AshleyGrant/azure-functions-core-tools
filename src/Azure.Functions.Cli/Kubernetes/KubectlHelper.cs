@@ -12,24 +12,20 @@ namespace Azure.Functions.Cli.Kubernetes
 {
     public static class KubectlHelper
     {
-        public static async Task KubectlCreate(object obj, bool showOutput)
+        public static async Task KubectlApply(object obj, bool showOutput, bool ignoreError = false)
         {
             var payload = JsonConvert.SerializeObject(obj, Newtonsoft.Json.Formatting.None,
                 new Newtonsoft.Json.JsonSerializerSettings
                 {
                     NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore
                 });
+            await KubectlApply(payload, showOutput, ignoreError);
+        }
 
-            var file = Path.GetTempFileName();
-            await FileSystemHelpers.WriteAllTextToFileAsync(file, payload);
-            try
-            {
-                await RunKubectl($"create -f {file}", showOutput: showOutput);
-            }
-            finally
-            {
-                FileSystemHelpers.FileDelete(file);
-            }
+        public static async Task KubectlApply(string content, bool showOutput, bool ignoreError = false)
+        {
+            await RunKubectl($"apply -f -", showOutput: showOutput, ignoreError: ignoreError, stdIn: content);
+            //Console.WriteLine(content);
         }
 
         public static async Task<T> KubectlGet<T>(string resource)
@@ -39,13 +35,13 @@ namespace Azure.Functions.Cli.Kubernetes
             return JsonConvert.DeserializeObject<T>(output);
         }
 
-        public static async Task<(string output, string error)> RunKubectl(string cmd, bool ignoreError = false, bool showOutput = false)
+        public static async Task<(string output, string error)> RunKubectl(string cmd, bool ignoreError = false, bool showOutput = false, string stdIn = null)
         {
             var docker = new Executable("kubectl", cmd);
             var sbError = new StringBuilder();
             var sbOutput = new StringBuilder();
 
-            var exitCode = await docker.RunAsync(l => sbOutput.AppendLine(l), e => sbError.AppendLine(e));
+            var exitCode = await docker.RunAsync(l => sbOutput.AppendLine(l), e => sbError.AppendLine(e), stdIn: stdIn);
 
             if (exitCode != 0 && !ignoreError)
             {
@@ -53,7 +49,13 @@ namespace Azure.Functions.Cli.Kubernetes
                     $"output: {sbOutput.ToString()}\n{sbError.ToString()}");
             }
 
-            return (sbOutput.ToString(), sbError.ToString());
+            if (showOutput)
+            {
+                Console.WriteLine(sbOutput.ToString().Trim());
+                Console.WriteLine(sbError.ToString().Trim());
+            }
+
+            return (sbOutput.ToString().Trim(), sbError.ToString().Trim());
         }
     }
 }
