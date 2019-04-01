@@ -68,13 +68,13 @@ namespace Azure.Functions.Cli.Kubernetes
             return deployment;
         }
 
-        internal static async Task RemoveKore()
+        internal static async Task RemoveKore(string @namespace)
         {
-            await KubectlHelper.RunKubectl("delete deployment.apps/kore-deployment", ignoreError: false, showOutput: true);
-            await KubectlHelper.RunKubectl("delete clusterrolebinding/kore-cluster-role-binding", ignoreError: true, showOutput: true);
-            await KubectlHelper.RunKubectl("delete serviceaccount/kore-service-account", ignoreError: false, showOutput: true);
-            await KubectlHelper.RunKubectl("delete secrets/kore-docker-auth", ignoreError: false, showOutput: true);
-            await KubectlHelper.RunKubectl("delete crd/scaledobjects.kore.k8s.io", ignoreError: false, showOutput: true);
+            await KubectlHelper.RunKubectl($"delete deployment.apps/kore-deployment --namespace {@namespace}", ignoreError: false, showOutput: true);
+            await KubectlHelper.RunKubectl($"delete clusterrolebinding/kore-cluster-role-binding --namespace {@namespace}", ignoreError: true, showOutput: true);
+            await KubectlHelper.RunKubectl($"delete serviceaccount/kore-service-account --namespace {@namespace}", ignoreError: false, showOutput: true);
+            await KubectlHelper.RunKubectl($"delete secrets/kore-docker-auth --namespace {@namespace}", ignoreError: false, showOutput: true);
+            await KubectlHelper.RunKubectl($"delete crd/scaledobjects.kore.k8s.io", ignoreError: false, showOutput: true);
         }
 
         public static ScaledObject GenerateScaledObject(string name, string @namespace, Deployment deployment)
@@ -115,6 +115,8 @@ namespace Azure.Functions.Cli.Kubernetes
                     {
                         deploymentName = deployment.metadata.name
                     },
+                    pollingInterval = 5,
+                    cooldownPeriod = 20,
                     triggers = triggers
                 }
             };
@@ -133,7 +135,7 @@ namespace Azure.Functions.Cli.Kubernetes
             return crdResult.items.Any(i => i.Metadata.Name == "scaledobjects.kore.k8s.io");
         }
 
-        public static async Task CreateKore(bool disableTls)
+        public static async Task CreateKore(string @namespace)
         {
             // Create CRD
             await KubectlHelper.KubectlApply(@"apiVersion: apiextensions.k8s.io/v1beta1
@@ -150,7 +152,7 @@ spec:
     plural: scaledobjects
   scope: Namespaced", showOutput: true, ignoreError: true);
 
-            await KubectlHelper.KubectlApply(@"apiVersion: v1
+            await KubectlHelper.KubectlApply($@"apiVersion: v1
 data:
   .dockerconfigjson: eyJhdXRocyI6eyJwcm9qZWN0a29yZS5henVyZWNyLmlvIjp7InVzZXJuYW1lIjoiYjUxNGI2MGMtNjhjYy00ZjEyLWIzNjEtMzg1ODg3OGIyNDc5IiwicGFzc3dvcmQiOiI0alg1dmtQVFNyVVE5NlVCYlUvQjdDUXJCb0p3VDYyV1NzNVdmWnRGYkI4PSIsImF1dGgiOiJZalV4TkdJMk1HTXROamhqWXkwMFpqRXlMV0l6TmpFdE16ZzFPRGczT0dJeU5EYzVPalJxV0RWMmExQlVVM0pWVVRrMlZVSmlWUzlDTjBOUmNrSnZTbmRVTmpKWFUzTTFWMlphZEVaaVFqZzkifX19
 kind: Secret
@@ -158,26 +160,28 @@ metadata:
   labels:
     app: kore
   name: kore-docker-auth
+  namespace: {@namespace}
 type: kubernetes.io/dockerconfigjson", showOutput: false, ignoreError: true);
 
             // Create ServiceAccount
-            await KubectlHelper.KubectlApply(@"apiVersion: v1
+            await KubectlHelper.KubectlApply($@"apiVersion: v1
 kind: ServiceAccount
 metadata:
   labels:
     app: kore
     release: core-tools
   name: kore-service-account
-  namespace: default", showOutput: true, ignoreError: true);
+  namespace: {@namespace}", showOutput: true, ignoreError: true);
 
             // Create ClusterRoleBinding
-            await KubectlHelper.KubectlApply(@"apiVersion: rbac.authorization.k8s.io/v1
+            await KubectlHelper.KubectlApply($@"apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
   labels:
     app: kore
     release: core-tools
   name: kore-cluster-role-binding
+  namespace: {@namespace}
 roleRef:
   kind: ClusterRole
   name: cluster-admin
@@ -185,16 +189,17 @@ roleRef:
 subjects:
 - kind: ServiceAccount
   name: kore-service-account
-  namespace: default", showOutput: true, ignoreError: true);
+  namespace: {@namespace}", showOutput: true, ignoreError: true);
 
             // Create Deployment
-            var deployment = @"apiVersion: apps/v1
+            var deployment = $@"apiVersion: apps/v1
 kind: Deployment
 metadata:
   labels:
     app: kore
     release: core-tools
   name: kore-deployment
+  namespace: {@namespace}
 spec:
   replicas: 1
   selector:
@@ -210,14 +215,10 @@ spec:
       serviceAccountName: kore-service-account
       containers:
       - name: kore
-        image: ""projectkore.azurecr.io/kore:ahmels-tls-queue""
-        imagePullPolicy: Always";
-            if (disableTls)
-            {
-                deployment += $"{Environment.NewLine}        args:{Environment.NewLine}          - --disableTLSVerification";
-                deployment += $"{Environment.NewLine}        env:{Environment.NewLine}          - name: KORE_TLS_SKIP_ARG_PASSED{Environment.NewLine}            value: \"1\"";
-            }
-            deployment += $"{Environment.NewLine}      imagePullSecrets:{Environment.NewLine}      - name: kore-docker-auth";
+        image: ""projectkore.azurecr.io/kore:ahmels-33-2""
+        imagePullPolicy: Always
+      imagePullSecrets:
+      - name: kore-docker-auth";
             await KubectlHelper.KubectlApply(deployment, showOutput: true, ignoreError: true);
         }
 

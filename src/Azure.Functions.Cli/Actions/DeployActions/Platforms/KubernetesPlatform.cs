@@ -18,7 +18,7 @@ namespace Azure.Functions.Cli.Actions.DeployActions.Platforms
 {
     public class KubernetesPlatform : IHostingPlatform
     {
-        private const string FUNCTIONS_NAMESPACE = "azure-functions";
+        private const string FUNCTIONS_NAMESPACE = "default";
         private readonly ISecretsManager _secretsManager;
 
         public KubernetesPlatform(ISecretsManager secretsManager)

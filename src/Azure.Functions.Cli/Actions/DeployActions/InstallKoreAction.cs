@@ -17,22 +17,22 @@ using static Colors.Net.StringStaticMethods;
 
 namespace Azure.Functions.Cli.Actions.LocalActions
 {
-    [Action(Name = "install-kore", Context = Context.Kubernetes, HelpText = "")]
+    [Action(Name = "init", Context = Context.Kubernetes, HelpText = "")]
     internal class DeployKoreAction : BaseAction
     {
-        public bool disableTLSVerification { get; private set; }
+        public string Namespace { get; private set; } = "default";
 
         public override ICommandLineParserResult ParseArgs(string[] args)
         {
             Parser
-                .Setup<bool>("disableTLSVerification")
-                .Callback(f => disableTLSVerification = f);
-                
+                .Setup<string>("namespace")
+                .Callback(s => Namespace = s);
+
             return base.ParseArgs(args);
         }
         public async override Task RunAsync()
         {
-            await KubernetesHelper.CreateKore(disableTLSVerification);
+            await KubernetesHelper.CreateKore(Namespace);
         }
     }
 }

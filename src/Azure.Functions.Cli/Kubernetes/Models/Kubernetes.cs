@@ -105,6 +105,7 @@ namespace Azure.Functions.Cli.Kubernetes.Models
     {
         public ScaledObjectScaleTargetRef scaleTargetRef { get; set; }
         public int? pollingInterval { get; set; }
+        public int? cooldownPeriod { get; set; }
         public IEnumerable<ScaledObjectTrigger> triggers { get; internal set; }
     }
 

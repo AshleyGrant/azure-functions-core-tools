@@ -17,12 +17,23 @@ using static Colors.Net.StringStaticMethods;
 
 namespace Azure.Functions.Cli.Actions.LocalActions
 {
-    [Action(Name = "remove-kore", Context = Context.Kubernetes, HelpText = "")]
+    [Action(Name = "remove", Context = Context.Kubernetes, HelpText = "")]
     internal class RemoveKoreAction : BaseAction
     {
+        public string Namespace { get; private set; } = "default";
+
+        public override ICommandLineParserResult ParseArgs(string[] args)
+        {
+            Parser
+                .Setup<string>("namespace")
+                .Callback(s => Namespace = s);
+
+            return base.ParseArgs(args);
+        }
+
         public async override Task RunAsync()
         {
-            await KubernetesHelper.RemoveKore();
+            await KubernetesHelper.RemoveKore(Namespace);
         }
     }
 }
